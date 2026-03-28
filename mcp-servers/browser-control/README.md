@@ -97,6 +97,68 @@ Replace `/absolute/path/to/agency-agents` with the real path on your system.
 }
 ```
 
+### Connect to your real Chrome (CDP mode)
+
+By default the MCP server launches a fresh headless Chromium with no saved logins. To use your **existing Chrome profile** — with LinkedIn, Naukri, Gmail, and other sites already logged in — use CDP (Chrome DevTools Protocol) attach mode.
+
+#### Step 1 — Start Chrome with remote debugging
+
+**Linux:**
+```bash
+google-chrome --remote-debugging-port=9222 --remote-allow-origins=*
+```
+
+**macOS:**
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 --remote-allow-origins=*
+```
+
+**Windows (PowerShell):**
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  --remote-debugging-port=9222 --remote-allow-origins=*
+```
+
+Or use the included helper script (Linux/macOS):
+```bash
+bash mcp-servers/browser-control/scripts/launch-chrome.sh
+```
+
+> Chrome opens normally with your profile and all your logins. The only addition is the debug port listening on `9222`.
+
+Verify it's working:
+```bash
+curl http://localhost:9222/json/version
+# Should print Chrome version JSON
+```
+
+#### Step 2 — Configure the MCP server to attach
+
+Add `BROWSER_CDP_URL` to your `~/.claude/mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "browser-control": {
+      "command": "node",
+      "args": ["/absolute/path/to/agency-agents/mcp-servers/browser-control/index.js"],
+      "env": {
+        "BROWSER_CDP_URL": "http://localhost:9222"
+      }
+    }
+  }
+}
+```
+
+#### Step 3 — Restart Claude Code
+
+Claude will now see your existing tabs and can navigate, click, fill forms, and take screenshots inside your real Chrome window — with all your logins active.
+
+> **Note:** When using CDP mode, closing the MCP server does **not** close your Chrome. Your browser session is fully preserved.
+
+---
+
 ### Verify installation
 
 After adding to MCP settings, restart Claude Code and run:
@@ -111,9 +173,10 @@ You should see `browser-control` listed with 25 tools.
 
 | Variable | Default | Description |
 |---|---|---|
-| `BROWSER_TYPE` | `chromium` | Browser engine: `chromium`, `firefox`, or `webkit` |
-| `BROWSER_HEADLESS` | `true` | Run headless (`true`) or show browser window (`false`) |
-| `BROWSER_PROFILE_DIR` | _(none)_ | Path to persist cookies, localStorage, login sessions |
+| `BROWSER_CDP_URL` | _(none)_ | **CDP attach mode** — `http://localhost:9222`. When set, attaches to your running Chrome instead of launching a new one. All other variables below are ignored in this mode. |
+| `BROWSER_TYPE` | `chromium` | Launch mode only: browser engine (`chromium`, `firefox`, `webkit`) |
+| `BROWSER_HEADLESS` | `true` | Launch mode only: run headless (`true`) or show window (`false`) |
+| `BROWSER_PROFILE_DIR` | _(none)_ | Launch mode only: path to persist cookies/sessions across restarts |
 
 ---
 
