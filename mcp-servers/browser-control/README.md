@@ -101,36 +101,49 @@ Replace `/absolute/path/to/agency-agents` with the real path on your system.
 
 By default the MCP server launches a fresh headless Chromium with no saved logins. To use your **existing Chrome profile** — with LinkedIn, Naukri, Gmail, and other sites already logged in — use CDP (Chrome DevTools Protocol) attach mode.
 
-#### Step 1 — Start Chrome with remote debugging
+> **Important:** Chrome locks its profile directory. If Chrome is already running, passing `--remote-debugging-port` to a new Chrome process is silently ignored and `DevToolsActivePort` is never written — causing the MCP attach to time out. The fix is to **close all Chrome windows first**, then restart with the debug flag pointing at your real `--user-data-dir`.
 
-**Linux:**
-```bash
-google-chrome --remote-debugging-port=9222 --remote-allow-origins=*
-```
+#### Step 1 — Restart Chrome with remote debugging (use the helper script)
 
-**macOS:**
-```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  --remote-debugging-port=9222 --remote-allow-origins=*
-```
+The included script handles everything: kills existing Chrome, removes stale lock files, and restarts with your real profile + debug port.
 
-**Windows (PowerShell):**
-```powershell
-& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
-  --remote-debugging-port=9222 --remote-allow-origins=*
-```
-
-Or use the included helper script (Linux/macOS):
 ```bash
 bash mcp-servers/browser-control/scripts/launch-chrome.sh
 ```
 
-> Chrome opens normally with your profile and all your logins. The only addition is the debug port listening on `9222`.
+**Or manually (close Chrome first, then run):**
 
-Verify it's working:
+```bash
+# Linux — kills Chrome then restarts with your real profile
+pkill -f google-chrome || true
+sleep 1
+google-chrome \
+  --remote-debugging-port=9222 \
+  --remote-allow-origins="*" \
+  --user-data-dir="$HOME/.config/google-chrome"
+```
+
+```bash
+# macOS
+pkill -x "Google Chrome" || true
+sleep 1
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --remote-allow-origins="*" \
+  --user-data-dir="$HOME/Library/Application Support/Google/Chrome"
+```
+
+```powershell
+# Windows (PowerShell) — close Chrome first manually, then:
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  --remote-debugging-port=9222 `
+  --remote-allow-origins=* `
+  --user-data-dir="$env:LOCALAPPDATA\Google\Chrome\User Data"
+```
+
+Verify it's working — this must return JSON before Claude can attach:
 ```bash
 curl http://localhost:9222/json/version
-# Should print Chrome version JSON
 ```
 
 #### Step 2 — Configure the MCP server to attach
@@ -156,6 +169,15 @@ Add `BROWSER_CDP_URL` to your `~/.claude/mcp_settings.json`:
 Claude will now see your existing tabs and can navigate, click, fill forms, and take screenshots inside your real Chrome window — with all your logins active.
 
 > **Note:** When using CDP mode, closing the MCP server does **not** close your Chrome. Your browser session is fully preserved.
+
+#### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `DevToolsActivePort` not found / attach timeout | Chrome was already running; debug port was ignored | Run the helper script (it kills Chrome first) or close Chrome manually, then restart with `--user-data-dir` |
+| `Target closed` or immediate disconnect | Stale `SingletonLock` from a previous crash | The helper script removes these; or `rm ~/.config/google-chrome/Singleton*` |
+| `curl http://localhost:9222/json/version` fails | Port blocked or Chrome didn't start with the flag | Check Chrome is running: `pgrep -a chrome`; confirm the flag is present |
+| Wrong profile (no logins) | `--user-data-dir` points to wrong directory | Check your Chrome profile path; use `USER_DATA_DIR=/path/to/profile bash launch-chrome.sh` |
 
 ---
 
